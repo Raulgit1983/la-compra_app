@@ -1,0 +1,279 @@
+:root {
+  --bg: #f5f7ff;
+  --card: #ffffff;
+  --ink: #1e2440;
+  --subtle: #6b738f;
+  --brand: #5b67ff;
+  --brand-2: #7f89ff;
+  --ok: #0f9d58;
+  --warn: #f9ab00;
+  --bad: #d93025;
+  --line: #e4e8ff;
+  --radius: 18px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  background: radial-gradient(circle at top, #eef1ff 0%, var(--bg) 45%);
+  color: var(--ink);
+}
+
+.app-shell {
+  width: min(1100px, 92vw);
+  margin: 24px auto 48px;
+  display: grid;
+  gap: 16px;
+}
+
+.hero {
+  background: linear-gradient(120deg, var(--brand), #3e45d8);
+  color: white;
+  border-radius: var(--radius);
+  padding: 22px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 12px 30px rgba(63, 76, 207, 0.25);
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: 0.82rem;
+  opacity: 0.8;
+}
+
+h1 {
+  margin: 6px 0;
+}
+
+.subtitle {
+  margin: 0;
+  opacity: 0.88;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.card {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 16px;
+  border: 1px solid var(--line);
+  box-shadow: 0 6px 20px rgba(46, 57, 120, 0.08);
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.chip {
+  font-size: 0.76rem;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.chip.off {
+  background: #ecf0ff;
+  color: #4f5ac8;
+}
+
+.chip.on {
+  background: #ddffe8;
+  color: #15803d;
+}
+
+.hint {
+  color: var(--subtle);
+  margin-top: 6px;
+}
+
+
+.feedback {
+  margin: 8px 0 0;
+}
+
+.camera-wrap {
+  margin-top: 12px;
+  position: relative;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: #0f1224;
+  aspect-ratio: 4 / 3;
+}
+
+#cameraView {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: none;
+}
+
+.scan-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  top: 20%;
+  background: rgba(91, 103, 255, 0.85);
+  box-shadow: 0 0 14px rgba(127, 137, 255, 0.9);
+  animation: move 2s infinite ease-in-out;
+  display: none;
+}
+
+@keyframes move {
+  0% {
+    top: 20%;
+  }
+  50% {
+    top: 78%;
+  }
+  100% {
+    top: 20%;
+  }
+}
+
+.inline-actions {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btn {
+  border: none;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-weight: 600;
+  cursor: pointer;
+  background: #eaf0ff;
+  color: #25304f;
+}
+
+.btn.primary {
+  background: #ffffff;
+  color: #2d39b8;
+}
+
+.camera-card .btn.primary,
+.manual-form .btn.primary {
+  background: var(--brand);
+  color: #fff;
+}
+
+.btn.ghost {
+  background: transparent;
+  border: 1px solid #d6dbf3;
+}
+
+.totals {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.totals p {
+  margin: 0;
+  color: var(--subtle);
+  font-size: 0.85rem;
+}
+
+#basketTotal {
+  font-size: 1.7rem;
+}
+
+#budgetInput,
+.plan-form input,
+.manual-form input {
+  width: 100%;
+  border: 1px solid #d5dbfa;
+  border-radius: 10px;
+  padding: 10px;
+  font: inherit;
+}
+
+.progress-wrap {
+  height: 10px;
+  border-radius: 999px;
+  background: #edf1ff;
+  margin-top: 12px;
+  overflow: hidden;
+}
+
+.progress {
+  width: 0%;
+  height: 100%;
+  background: linear-gradient(90deg, var(--ok), #18c273);
+  transition: width 0.2s ease;
+}
+
+.status {
+  font-size: 0.9rem;
+  margin: 8px 0 12px;
+}
+
+.basket-list,
+.plan-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.basket-item,
+.plan-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.small {
+  color: var(--subtle);
+  font-size: 0.8rem;
+}
+
+.plan-form {
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 2fr 90px auto;
+}
+
+.manual-form {
+  display: grid;
+  gap: 10px;
+  min-width: min(90vw, 340px);
+}
+
+dialog {
+  border: none;
+  border-radius: 14px;
+}
+
+@media (max-width: 720px) {
+  .hero {
+    flex-direction: column;
+    align-items: start;
+  }
+
+  .plan-form {
+    grid-template-columns: 1fr;
+  }
+}
