@@ -95,7 +95,7 @@ async function getLiveProductInfo(code) {
     return { name, price, code, source: 'catálogo local' };
   }
 
-  // 3. OPEN FOOD FACTS (Online)
+  // 3. OPEN FOOD FACTS (Solo para el NOMBRE, ya que queremos que el usuario fije el precio si no existe)
   try {
     const offResponse = await fetch(
       `https://world.openfoodfacts.org/api/v0/product/${encodeURIComponent(code)}.json`
@@ -108,24 +108,8 @@ async function getLiveProductInfo(code) {
     console.warn('No pude consultar Open Food Facts para nombre', error);
   }
 
-  const endpoints = [
-    `https://prices.openfoodfacts.org/api/v1/prices?product_code=${encodeURIComponent(code)}`,
-    `https://prices.openfoodfacts.org/api/v1/prices?barcode=${encodeURIComponent(code)}`,
-    `https://prices.openfoodfacts.org/api/v1/products/${encodeURIComponent(code)}/prices`,
-  ];
-
-  for (const endpoint of endpoints) {
-    try {
-      const response = await fetch(endpoint);
-      if (!response.ok) continue;
-      const livePrice = extractPriceFromUnknownPayload(await response.json());
-      if (livePrice !== null) return { name, price: livePrice, code, source: 'precio online' };
-    } catch (error) {
-      console.warn('Error consultando precio online', endpoint, error);
-    }
-  }
-
-  return { name, price: null, code, source: 'sin precio detectado' };
+  // Si llegamos aquí, no tenemos precio seguro, así que devolvemos null para forzar que el usuario lo introduzca.
+  return { name, price: null, code, source: 'nuevo (requiere precio)' };
 }
 
 // ─── Render ───────────────────────────────────────────────────
