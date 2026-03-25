@@ -1,5 +1,27 @@
 import { localCatalog } from './catalog.js';
 
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-app.js";
+import { getFirestore, doc, setDoc, getDoc, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAJa3P-HMm94anM-BQoOgtRKNvTy6sq7H8",
+  authDomain: "la-compra-2ea28.firebaseapp.com",
+  projectId: "la-compra-2ea28",
+  storageBucket: "la-compra-2ea28.firebasestorage.app",
+  messagingSenderId: "544507120104",
+  appId: "1:544507120104:web:637f85c45e3b7fb45e7c5d",
+  measurementId: "G-4L0JBTDN74"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+// Enable offline persistence to keep the app ultra-fast
+enableIndexedDbPersistence(db).catch((err) => {
+  console.warn("No se pudo habilitar offline persistence", err);
+});
+
+
 const dom = {
   cameraView: document.getElementById('cameraView'),
   cameraState: document.getElementById('cameraState'),
@@ -33,13 +55,20 @@ const state = {
   plan: [],
   lastCode: null,
   catalog: { ...localCatalog },
-  learnedPrices: JSON.parse(localStorage.getItem('laCompra_learnedPrices') || '{}'),
 };
 
-function saveLearnedProduct(code, name, price) {
+async function saveLearnedProduct(code, name, price) {
   if (!code) return;
-  state.learnedPrices[code] = { name, price };
-  localStorage.setItem('laCompra_learnedPrices', JSON.stringify(state.learnedPrices));
+  try {
+    await setDoc(doc(db, "prices", code), {
+      name,
+      price,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+    console.log(`Guardado en Firebase: ${name} a ${price}€`);
+  } catch (error) {
+    console.error("Error guardando en Firebase:", error);
+  }
 }
 
 
@@ -80,10 +109,18 @@ function extractPriceFromUnknownPayload(payload) {
 // ─── Consulta online y fallback local/aprendido ───────────────────────
 
 async function getLiveProductInfo(code) {
-  // 1. PRECIO GUARDADO/APRENDIDO (Mayor prioridad)
-  const learned = state.learnedPrices[code];
-  if (learned && Number.isFinite(learned.price)) {
-    return { name: learned.name, price: learned.price, code, source: 'precio guardado' };
+  // 1. PRECIO COMUNITARIO (Firebase Firestore)
+  try {
+    const docRef = doc(db, "prices", code);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      if (Number.isFinite(data.price)) {
+        return { name: data.name, price: data.price, code, source: 'comunidad' };
+      }
+    }
+  } catch (error) {
+    console.error("Error consultando Firebase:", error);
   }
 
   // 2. CATÁLOGO LOCAL (Fallback)
