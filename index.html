@@ -26,12 +26,9 @@
             <span id="cameraState" class="chip off">Cámara apagada</span>
           </div>
           <p class="hint">
-            Apunta al código de barras. En iPhone usamos un escáner alternativo para que funcione sin
-            `BarcodeDetector`.
-          </p>
-          <p id="scanFeedback" class="small feedback">Listo para escanear.</p>
             Apunta al código de barras. Si tu móvil no lo detecta, puedes añadirlo manualmente.
           </p>
+          <p id="scanFeedback" class="small feedback">Listo para escanear.</p>
           <div class="camera-wrap">
             <video id="cameraView" autoplay playsinline muted></video>
             <div class="scan-line"></div>
@@ -58,7 +55,6 @@
             <div id="budgetProgress" class="progress"></div>
           </div>
           <p id="budgetStatus" class="status">Perfecto: vas dentro del presupuesto.</p>
-
           <ul id="basketList" class="basket-list"></ul>
         </article>
       </section>
@@ -88,6 +84,7 @@
         <input id="receiptInput" type="file" accept="image/*" capture="environment" hidden />
         <div class="inline-actions">
           <button type="button" id="priceFromImageBtn" class="btn">Analizar precio por imagen</button>
+        </div>
         <div class="inline-actions">
           <button type="button" id="closeManual" class="btn ghost">Cancelar</button>
           <button type="submit" class="btn primary">Guardar</button>

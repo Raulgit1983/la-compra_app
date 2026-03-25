@@ -40,68 +40,61 @@ const state = {
 
 const hasBarcodeAPI = 'BarcodeDetector' in window;
 const detector = hasBarcodeAPI
-  ? new BarcodeDetector({
-      formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128'],
-    })
+  ? new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128'] })
   : null;
+
+// ─── Utilidades ───────────────────────────────────────────────
 
 function setFeedback(message) {
   dom.scanFeedback.textContent = message;
 }
 
 function formatMoney(value) {
-  return new Intl.NumberFormat('es-ES', {
-    style: 'currency',
-    currency: 'EUR',
-  }).format(value);
+  return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(value);
 }
 
 function extractPriceFromUnknownPayload(payload) {
-  if (!payload || typeof payload !== 'object') {
-    return null;
-  }
+  if (!payload || typeof payload !== 'object') return null;
 
   const queue = [payload];
   while (queue.length) {
     const current = queue.shift();
-
-    if (Array.isArray(current)) {
-      queue.push(...current);
-      continue;
-    }
-
+    if (Array.isArray(current)) { queue.push(...current); continue; }
     if (current && typeof current === 'object') {
-      const knownCandidates = [
-        current.price,
-        current.price_value,
-        current.amount,
-        current.value,
-      ];
-
-      for (const candidate of knownCandidates) {
+      const candidates = [current.price, current.price_value, current.amount, current.value];
+      for (const candidate of candidates) {
         const numeric = Number(candidate);
-        if (Number.isFinite(numeric) && numeric > 0) {
-          return Number(numeric.toFixed(2));
-        }
+        if (Number.isFinite(numeric) && numeric > 0) return Number(numeric.toFixed(2));
       }
-
       queue.push(...Object.values(current));
     }
   }
-
   return null;
 }
 
+// ─── Catálogo local (fallback cuando no hay precio online) ────
+
+function getCatalogProduct(code) {
+  const product = state.catalog[code];
+  if (product) return { ...product, code };
+  return {
+    name: `Producto ${code.slice(-4)}`,
+    code,
+    price: Number((Math.random() * 4 + 0.8).toFixed(2)),
+  };
+}
+
+// ─── Consulta online de nombre y precio ───────────────────────
+
 async function getLiveProductInfo(code) {
-  const fallbackCatalog = state.catalog[code];
-  let name = fallbackCatalog?.name || `Producto ${code}`;
-  let price = Number.isFinite(fallbackCatalog?.price) ? fallbackCatalog.price : null;
+  const fallback = state.catalog[code];
+  let name = fallback?.name || `Producto ${code}`;
+  let price = Number.isFinite(fallback?.price) ? fallback.price : null;
 
   try {
     const offResponse = await fetch(
-      `https://world.openfoodfacts.org/api/v0/product/${encodeURIComponent(code)}.json`,
+      `https://world.openfoodfacts.org/api/v0/product/${encodeURIComponent(code)}.json`
     );
-
     if (offResponse.ok) {
       const offData = await offResponse.json();
       name = offData?.product?.product_name || offData?.product?.generic_name || name;
@@ -110,28 +103,20 @@ async function getLiveProductInfo(code) {
     console.warn('No pude consultar Open Food Facts para nombre', error);
   }
 
-  if (price !== null) {
-    return { name, price, code, source: 'catálogo local' };
-  }
+  if (price !== null) return { name, price, code, source: 'catálogo local' };
 
-  const possiblePriceEndpoints = [
+  const endpoints = [
     `https://prices.openfoodfacts.org/api/v1/prices?product_code=${encodeURIComponent(code)}`,
     `https://prices.openfoodfacts.org/api/v1/prices?barcode=${encodeURIComponent(code)}`,
     `https://prices.openfoodfacts.org/api/v1/products/${encodeURIComponent(code)}/prices`,
   ];
 
-  for (const endpoint of possiblePriceEndpoints) {
+  for (const endpoint of endpoints) {
     try {
       const response = await fetch(endpoint);
-      if (!response.ok) {
-        continue;
-      }
-
-      const payload = await response.json();
-      const livePrice = extractPriceFromUnknownPayload(payload);
-      if (livePrice !== null) {
-        return { name, price: livePrice, code, source: 'precio online' };
-      }
+      if (!response.ok) continue;
+      const livePrice = extractPriceFromUnknownPayload(await response.json());
+      if (livePrice !== null) return { name, price: livePrice, code, source: 'precio online' };
     } catch (error) {
       console.warn('Error consultando precio online', endpoint, error);
     }
@@ -139,6 +124,8 @@ async function getLiveProductInfo(code) {
 
   return { name, price: null, code, source: 'sin precio detectado' };
 }
+
+// ─── Render ───────────────────────────────────────────────────
 
 function renderBasket() {
   dom.basketList.innerHTML = '';
@@ -154,17 +141,17 @@ function renderBasket() {
       </div>
       <div>
         <strong>${Number.isFinite(item.price) ? formatMoney(item.price) : 'Precio pendiente'}</strong>
-      </div>
-      <div>
-        <strong>${formatMoney(item.price)}</strong>
         <button class="btn ghost" data-remove="${index}">Quitar</button>
       </div>
     `;
     dom.basketList.append(li);
   });
 
-  const total = state.basket.reduce((acc, item) => acc + (Number.isFinite(item.price) ? item.price : 0), 0);
-  const total = state.basket.reduce((acc, item) => acc + item.price, 0);
+  // FIX: una sola declaración de total, usando Number.isFinite para evitar NaN
+  const total = state.basket.reduce(
+    (acc, item) => acc + (Number.isFinite(item.price) ? item.price : 0),
+    0
+  );
   dom.basketTotal.textContent = formatMoney(total);
   updateBudgetStatus(total);
 }
@@ -217,13 +204,13 @@ function addBasketItem(item) {
   renderBasket();
 }
 
+// ─── Escáner ──────────────────────────────────────────────────
+
 async function applyScanResult(code) {
-  if (!code || code === state.lastCode) {
-    return;
-  }
+  if (!code || code === state.lastCode) return;
 
   state.lastCode = code;
-  setFeedback(`Código detectado: ${code}. Buscando nombre y precio real…`);
+  setFeedback(`Código detectado: ${code}. Buscando nombre y precio…`);
 
   const product = await getLiveProductInfo(code);
   addBasketItem(product);
@@ -232,54 +219,28 @@ async function applyScanResult(code) {
     dom.manualName.value = product.name;
     dom.manualCode.value = code;
     dom.manualDialog.showModal();
-    setFeedback('No encontré precio online. Puedes capturar etiqueta para OCR o escribir precio.');
+    setFeedback('No encontré precio online. Escribe el precio manualmente.');
   } else {
     setFeedback(`Añadido: ${product.name} (${formatMoney(product.price)} · ${product.source}).`);
   }
 
-  setTimeout(() => {
-    state.lastCode = null;
-  }, 1300);
+  setTimeout(() => { state.lastCode = null; }, 1300);
 }
 
+// FIX: una sola función scanWithBarcodeDetector, correctamente cerrada
 async function scanWithBarcodeDetector() {
-function getCatalogProduct(code) {
-  const product = state.catalog[code];
-
-  if (product) {
-    return { ...product, code };
-  }
-
-  return {
-    name: `Producto ${code.slice(-4)}`,
-    code,
-    price: Number((Math.random() * 4 + 0.8).toFixed(2)),
-  };
-}
-
-async function scanOnce() {
-  if (!state.stream || !detector) {
-    return;
-  }
-
+  if (!state.stream || !detector) return;
   try {
     const barcodes = await detector.detect(dom.cameraView);
-
-    if (!barcodes.length) {
-      return;
-    }
-
-    const code = barcodes[0].rawValue;
-    await applyScanResult(code);
+    if (!barcodes.length) return;
+    await applyScanResult(barcodes[0].rawValue);
   } catch (error) {
-    console.error('No se pudo escanear con BarcodeDetector', error);
+    console.error('Error con BarcodeDetector', error);
   }
 }
 
 function scanWithQuagga() {
-  if (!window.Quagga || !state.stream) {
-    return;
-  }
+  if (!window.Quagga || !state.stream) return;
 
   const canvas = document.createElement('canvas');
   canvas.width = dom.cameraView.videoWidth || 1280;
@@ -299,35 +260,21 @@ function scanWithQuagga() {
     },
     async (result) => {
       const code = result?.codeResult?.code;
-      if (code) {
-        await applyScanResult(code);
-      }
-    },
+      if (code) await applyScanResult(code);
+    }
   );
 }
 
+// FIX: una sola función scanOnce, fuera de las demás
 async function scanOnce() {
   if (hasBarcodeAPI) {
     await scanWithBarcodeDetector();
-    return;
-  }
-
-  scanWithQuagga();
-    if (!code || code === state.lastCode) {
-      return;
-    }
-
-    state.lastCode = code;
-    const product = getCatalogProduct(code);
-    addBasketItem(product);
-
-    setTimeout(() => {
-      state.lastCode = null;
-    }, 1300);
-  } catch (error) {
-    console.error('No se pudo escanear', error);
+  } else {
+    scanWithQuagga();
   }
 }
+
+// ─── Cámara ───────────────────────────────────────────────────
 
 async function startCamera() {
   if (!navigator.mediaDevices?.getUserMedia) {
@@ -344,152 +291,116 @@ async function startCamera() {
     dom.cameraView.srcObject = state.stream;
     dom.cameraView.style.display = 'block';
     document.querySelector('.scan-line').style.display = 'block';
-    dom.cameraState.textContent = hasBarcodeAPI ? 'Escaneando…' : 'Escaneando (modo iPhone compatible)…';
+
+    // FIX: un solo textContent y un solo setInterval
     dom.cameraState.textContent = hasBarcodeAPI ? 'Escaneando…' : 'Cámara activa';
-    dom.cameraState.classList.remove('off');
-    dom.cameraState.classList.add('on');
+    dom.cameraState.classList.replace('off', 'on');
     dom.toggleCameraBtn.textContent = 'Apagar cámara';
 
     setFeedback(
       hasBarcodeAPI
         ? 'Escáner nativo activo.'
-        : 'Escáner alternativo activo (Quagga) para navegadores sin BarcodeDetector.',
+        : 'Escáner alternativo activo (Quagga).'
     );
 
     state.scanTimer = setInterval(scanOnce, hasBarcodeAPI ? 1000 : 1400);
-    if (!hasBarcodeAPI) {
-      dom.cameraState.textContent = 'Cámara activa (sin API de escaneo)';
-      return;
-    }
-
-    state.scanTimer = setInterval(scanOnce, 1000);
   } catch (error) {
-    alert('No pude abrir la cámara. Comprueba permisos.');
+    alert('No pude abrir la cámara. Comprueba los permisos.');
     console.error(error);
   }
 }
 
 function stopCamera() {
-  if (state.scanTimer) {
-    clearInterval(state.scanTimer);
-    state.scanTimer = null;
-  }
-
-  if (state.stream) {
-    state.stream.getTracks().forEach((track) => track.stop());
-    state.stream = null;
-  }
+  if (state.scanTimer) { clearInterval(state.scanTimer); state.scanTimer = null; }
+  if (state.stream) { state.stream.getTracks().forEach((t) => t.stop()); state.stream = null; }
 
   dom.cameraView.srcObject = null;
   dom.cameraView.style.display = 'none';
   document.querySelector('.scan-line').style.display = 'none';
   dom.cameraState.textContent = 'Cámara apagada';
-  dom.cameraState.classList.remove('on');
-  dom.cameraState.classList.add('off');
+  dom.cameraState.classList.replace('on', 'off');
   dom.toggleCameraBtn.textContent = 'Activar cámara';
   setFeedback('Cámara detenida.');
 }
 
+// ─── OCR ──────────────────────────────────────────────────────
+
 async function extractPriceFromImage(file) {
-  if (!window.Tesseract) {
-    setFeedback('OCR no disponible en este navegador.');
-    return;
-  }
+  if (!window.Tesseract) { setFeedback('OCR no disponible en este navegador.'); return; }
 
   setFeedback('Analizando imagen para detectar precio…');
   const result = await window.Tesseract.recognize(file, 'eng+spa');
   const text = result?.data?.text || '';
   const candidates = text.match(/\d{1,3}[\.,]\d{2}/g) || [];
-  if (!candidates.length) {
-    setFeedback('No detecté precio claro en la imagen.');
-    return;
-  }
+
+  if (!candidates.length) { setFeedback('No detecté precio claro en la imagen.'); return; }
 
   const parsed = candidates
-    .map((value) => Number(value.replace('.', '').replace(',', '.')))
-    .filter((value) => Number.isFinite(value) && value > 0)
+    .map((v) => Number(v.replace('.', '').replace(',', '.')))
+    .filter((v) => Number.isFinite(v) && v > 0)
     .sort((a, b) => a - b);
 
-  if (!parsed.length) {
-    setFeedback('No detecté un precio válido tras OCR.');
-    return;
-  }
+  if (!parsed.length) { setFeedback('No detecté un precio válido tras OCR.'); return; }
 
   dom.manualPrice.value = parsed[0].toFixed(2);
-  setFeedback(`Precio detectado por imagen: ${formatMoney(parsed[0])}. Revísalo antes de guardar.`);
+  setFeedback(`Precio detectado: ${formatMoney(parsed[0])}. Revísalo antes de guardar.`);
 }
+
+// ─── Eventos ──────────────────────────────────────────────────
 
 function wireEvents() {
   dom.toggleCameraBtn.addEventListener('click', () => {
-    if (state.stream) {
-      stopCamera();
-    } else {
-      startCamera();
-    }
+    state.stream ? stopCamera() : startCamera();
   });
 
   dom.scanOnceBtn.addEventListener('click', async () => {
-    if (!state.stream) {
-      await startCamera();
-    }
-
-    if (!hasBarcodeAPI) {
-      dom.manualDialog.showModal();
-      return;
-    }
-
+    if (!state.stream) await startCamera();
+    if (!hasBarcodeAPI) { dom.manualDialog.showModal(); return; }
     await scanOnce();
   });
 
   dom.manualBtn.addEventListener('click', () => dom.manualDialog.showModal());
   dom.closeManual.addEventListener('click', () => dom.manualDialog.close());
 
-  dom.priceFromImageBtn.addEventListener('click', () => {
-    dom.receiptInput.click();
-  });
+  dom.priceFromImageBtn.addEventListener('click', () => dom.receiptInput.click());
 
-  dom.receiptInput.addEventListener('change', async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) {
-      return;
-    }
-
+  dom.receiptInput.addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
     await extractPriceFromImage(file);
     dom.receiptInput.value = '';
   });
 
-  dom.manualForm.addEventListener('submit', (event) => {
-    event.preventDefault();
-
+  dom.manualForm.addEventListener('submit', (e) => {
+    e.preventDefault();
     addBasketItem({
       name: dom.manualName.value.trim(),
       price: Number(dom.manualPrice.value),
       code: dom.manualCode.value.trim() || null,
       source: 'manual / OCR',
     });
-
     dom.manualForm.reset();
     dom.manualDialog.close();
   });
 
-  dom.basketList.addEventListener('click', (event) => {
-    const index = event.target.dataset.remove;
-    if (index === undefined) {
-      return;
-    }
-
+  dom.basketList.addEventListener('click', (e) => {
+    const index = e.target.dataset.remove;
+    if (index === undefined) return;
     state.basket.splice(Number(index), 1);
     renderBasket();
   });
 
   dom.budgetInput.addEventListener('input', () => {
-    const total = state.basket.reduce((acc, item) => acc + (Number.isFinite(item.price) ? item.price : 0), 0);
-    const total = state.basket.reduce((acc, item) => acc + item.price, 0);
+    // FIX: una sola declaración de total
+    const total = state.basket.reduce(
+      (acc, item) => acc + (Number.isFinite(item.price) ? item.price : 0),
+      0
+    );
     updateBudgetStatus(total);
   });
 
-  dom.planForm.addEventListener('submit', (event) => {
-    event.preventDefault();
+  dom.planForm.addEventListener('submit', (e) => {
+    e.preventDefault();
     state.plan.unshift({
       name: dom.planName.value.trim(),
       qty: Number(dom.planQty.value),
@@ -500,17 +411,15 @@ function wireEvents() {
     renderPlan();
   });
 
-  dom.planList.addEventListener('change', (event) => {
-    const index = event.target.dataset.check;
-    if (index === undefined) {
-      return;
-    }
-
-    state.plan[Number(index)].done = event.target.checked;
+  dom.planList.addEventListener('change', (e) => {
+    const index = e.target.dataset.check;
+    if (index === undefined) return;
+    state.plan[Number(index)].done = e.target.checked;
     renderPlan();
   });
 }
 
+// ─── Arranque ─────────────────────────────────────────────────
 renderBasket();
 renderPlan();
 wireEvents();
