@@ -153,6 +153,13 @@ h1 {
   background: transparent;
   border: 1px solid var(--line);
 }
+.btn.danger {
+  color: var(--bad);
+}
+.btn.danger:hover {
+  background: #fee2e2;
+  border-color: transparent;
+}
 .totals {
   display: flex;
   justify-content: space-between;

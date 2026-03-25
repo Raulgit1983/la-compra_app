@@ -1,7 +1,7 @@
 import { localCatalog } from './catalog.js';
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-app.js";
-import { getFirestore, doc, setDoc, getDoc, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDoc, enableMultiTabIndexedDbPersistence, onSnapshot, query, collection, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAJa3P-HMm94anM-BQoOgtRKNvTy6sq7H8",
@@ -16,8 +16,8 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// Enable offline persistence to keep the app ultra-fast
-enableIndexedDbPersistence(db).catch((err) => {
+// Enable offline persistence with multi-tab support
+enableMultiTabIndexedDbPersistence(db).catch((err) => {
   console.warn("No se pudo habilitar offline persistence", err);
 });
 
@@ -59,13 +59,16 @@ const state = {
 
 async function saveLearnedProduct(code, name, price) {
   if (!code) return;
+  const store = dom.manualStore ? dom.manualStore.value.trim() : '';
   try {
     await setDoc(doc(db, "prices", code), {
       name,
       price,
+      store,
       updatedAt: new Date().toISOString()
     }, { merge: true });
-    console.log(`Guardado en Firebase: ${name} a ${price}€`);
+    console.log(`Guardado en Firebase: ${name} a ${price}€ en ${store}`);
+    initSocialFeed(); // Refresh the feed after saving
   } catch (error) {
     console.error("Error guardando en Firebase:", error);
   }
@@ -116,7 +119,7 @@ async function getLiveProductInfo(code) {
     if (docSnap.exists()) {
       const data = docSnap.data();
       if (Number.isFinite(data.price)) {
-        return { name: data.name, price: data.price, code, source: 'comunidad' };
+        return { name: data.name, price: data.price, code, store: data.store || null, source: 'comunidad' };
       }
     }
   } catch (error) {
@@ -161,11 +164,11 @@ function renderBasket() {
       <div>
         <strong>${item.name}</strong>
         <p class="small">${item.code ? `Código: ${item.code}` : 'Añadido manualmente'}</p>
-        <p class="small">${item.source || 'fuente no indicada'}</p>
+        <p class="small">${item.source} ${item.store ? `(📍 ${item.store})` : ''}</p>
       </div>
       <div>
         <strong>${Number.isFinite(item.price) ? formatMoney(item.price) : 'Precio pendiente'}</strong>
-        <button class="btn ghost" data-remove="${index}">Quitar</button>
+        <button class="btn ghost danger" data-remove="${index}" style="padding: 6px 10px; margin-left: 8px;">✕</button>
       </div>
     `;
     dom.basketList.append(li);
@@ -191,10 +194,13 @@ function renderPlan() {
         <strong>${item.name}</strong>
         <p class="small">Cantidad: ${item.qty}</p>
       </div>
-      <label>
-        <input type="checkbox" data-check="${index}" ${item.done ? 'checked' : ''} />
-        Listo
-      </label>
+      <div style="display:flex; gap:12px; align-items:center;">
+        <label style="cursor:pointer; display:flex; align-items:center; gap:4px;">
+          <input type="checkbox" data-check="${index}" ${item.done ? 'checked' : ''} style="width:18px;height:18px;margin:0" />
+          <span class="small">Listo</span>
+        </label>
+        <button type="button" class="btn ghost danger" data-remove-plan="${index}" style="padding: 10px 14px; font-weight: 800; font-size: 1.1rem; border-radius:12px; flex-shrink:0;">✕</button>
+      </div>
     `;
     dom.planList.append(li);
   });
@@ -368,22 +374,37 @@ function stopCamera() {
 async function extractPriceFromImage(file) {
   if (!window.Tesseract) { setFeedback('OCR no disponible en este navegador.'); return; }
 
-  setFeedback('Analizando imagen para detectar precio…');
-  const result = await window.Tesseract.recognize(file, 'eng+spa');
-  const text = result?.data?.text || '';
-  const candidates = text.match(/\d{1,3}[\.,]\d{2}/g) || [];
+  const btn = dom.priceFromImageBtn;
+  const ogText = btn.textContent;
+  btn.textContent = 'Analizando... (puede tardar)';
+  btn.disabled = true;
 
-  if (!candidates.length) { setFeedback('No detecté precio claro en la imagen.'); return; }
+  try {
+    setFeedback('Analizando imagen para detectar precio…');
+    const result = await window.Tesseract.recognize(file, 'eng+spa');
+    const text = result?.data?.text || '';
+    
+    // Mejor RegEx para abarcar resultados sucios "1, 50" o "1 50"
+    const candidates = text.match(/\d+[\., ]\d{2}/g) || [];
 
-  const parsed = candidates
-    .map((v) => Number(v.replace('.', '').replace(',', '.')))
-    .filter((v) => Number.isFinite(v) && v > 0)
-    .sort((a, b) => a - b);
+    if (!candidates.length) { setFeedback('No detecté precio claro en la imagen.'); return; }
 
-  if (!parsed.length) { setFeedback('No detecté un precio válido tras OCR.'); return; }
+    const parsed = candidates
+      .map((v) => Number(v.replace(/ /g, '.').replace(',', '.')))
+      .filter((v) => Number.isFinite(v) && v > 0)
+      .sort((a, b) => a - b);
 
-  dom.manualPrice.value = parsed[0].toFixed(2);
-  setFeedback(`Precio detectado: ${formatMoney(parsed[0])}. Revísalo antes de guardar.`);
+    if (!parsed.length) { setFeedback('No detecté un precio válido tras OCR.'); return; }
+
+    dom.manualPrice.value = parsed[0].toFixed(2);
+    setFeedback(`Precio detectado: ${formatMoney(parsed[0])}. Revísalo antes de guardar.`);
+  } catch (err) {
+    console.error("OCR Error", err);
+    setFeedback('Hubo un error detectando texto en la imagen.');
+  } finally {
+    btn.textContent = ogText;
+    btn.disabled = false;
+  }
 }
 
 // ─── Eventos ──────────────────────────────────────────────────
@@ -465,9 +486,49 @@ function wireEvents() {
     state.plan[Number(index)].done = e.target.checked;
     renderPlan();
   });
+
+  dom.planList.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-remove-plan]');
+    if (!btn) return;
+    const index = Number(btn.dataset.removePlan);
+    state.plan.splice(index, 1);
+    renderPlan();
+  });
+}
+
+function initSocialFeed() {
+  if (!dom.communityList) return;
+  
+  const q = query(collection(db, "prices"), orderBy("updatedAt", "desc"), limit(5));
+  
+  onSnapshot(q, (snapshot) => {
+    dom.communityList.innerHTML = '';
+    if (snapshot.empty) {
+      dom.communityList.innerHTML = '<p class="small hint" style="padding:10px;">Aún no hay aportaciones de la comunidad.</p>';
+      return;
+    }
+    
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      const li = document.createElement('li');
+      li.className = 'basket-item';
+      li.innerHTML = `
+        <div>
+          <strong>${data.name}</strong>
+          <p class="small hint" style="margin:2px 0 0">📍 ${data.store || 'Anónimo'}</p>
+        </div>
+        <b>${Number(data.price).toFixed(2)}€</b>
+      `;
+      dom.communityList.appendChild(li);
+    });
+  }, (err) => {
+    console.warn("Feed social no pudo cargar", err);
+    dom.communityList.innerHTML = '<p class="small hint" style="padding:10px;">Modo sin conexión o fallo de red.</p>';
+  });
 }
 
 // ─── Arranque ─────────────────────────────────────────────────
 renderBasket();
 renderPlan();
 wireEvents();
+initSocialFeed();

@@ -59,19 +59,31 @@
         </article>
       </section>
 
-      <section class="card planner-card">
-        <div class="card-head">
-          <h2>Lista de compra</h2>
-          <p>Planifica lo que necesitas. Al escanearlo, se marcará como conseguido automáticamente.</p>
-        </div>
+      <section class="grid">
+        <article class="card planner-card">
+          <div class="card-head">
+            <h2>Lista de compra</h2>
+            <p>Planifica lo que necesitas. Al escanearlo, se marcará como conseguido automáticamente.</p>
+          </div>
 
-        <form id="planForm" class="plan-form">
-          <input id="planName" type="text" placeholder="Producto (ej: Yogur natural)" required />
-          <input id="planQty" type="number" min="1" value="1" required />
-          <button type="submit" class="btn">Añadir a lista</button>
-        </form>
+          <form id="planForm" class="plan-form">
+            <input id="planName" type="text" placeholder="Producto (ej: Yogur natural)" required />
+            <input id="planQty" type="number" min="1" value="1" required />
+            <button type="submit" class="btn">Añadir a lista</button>
+          </form>
 
-        <ul id="planList" class="plan-list"></ul>
+          <ul id="planList" class="plan-list"></ul>
+        </article>
+
+        <article class="card community-card">
+          <div class="card-head">
+            <h2>🌍 Radar de Comunidad</h2>
+            <p class="small">Últimos precios guardados por usuarios cerca de ti o globalmente.</p>
+          </div>
+          <ul id="communityList" class="basket-list">
+             <p class="small hint">Conectando a la red...</p>
+          </ul>
+        </article>
       </section>
     </main>
 
@@ -81,6 +93,7 @@
         <input id="manualName" type="text" placeholder="Nombre" required />
         <input id="manualPrice" type="number" min="0" step="0.01" placeholder="Precio" required />
         <input id="manualCode" type="text" placeholder="Código de barras (opcional)" />
+        <input id="manualStore" type="text" placeholder="Supermercado o Zona (ej. Mercadona, Sevilla)" />
         <input id="receiptInput" type="file" accept="image/*" capture="environment" hidden />
         <div class="inline-actions">
           <button type="button" id="priceFromImageBtn" class="btn">Analizar precio por imagen</button>
