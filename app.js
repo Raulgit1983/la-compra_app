@@ -1,3 +1,5 @@
+import { localCatalog } from './catalog.js';
+
 const dom = {
   cameraView: document.getElementById('cameraView'),
   cameraState: document.getElementById('cameraState'),
@@ -30,13 +32,16 @@ const state = {
   basket: [],
   plan: [],
   lastCode: null,
-  catalog: {
-    '8410188012345': { name: 'Leche semidesnatada', price: 1.14 },
-    '8437000456123': { name: 'Pan integral', price: 1.45 },
-    '8480000123456': { name: 'Arroz redondo 1kg', price: 1.8 },
-    '5000159484695': { name: 'Cereal avena', price: 2.95 },
-  },
+  catalog: { ...localCatalog },
+  learnedPrices: JSON.parse(localStorage.getItem('laCompra_learnedPrices') || '{}'),
 };
+
+function saveLearnedProduct(code, name, price) {
+  if (!code) return;
+  state.learnedPrices[code] = { name, price };
+  localStorage.setItem('laCompra_learnedPrices', JSON.stringify(state.learnedPrices));
+}
+
 
 const hasBarcodeAPI = 'BarcodeDetector' in window;
 const detector = hasBarcodeAPI
@@ -72,25 +77,25 @@ function extractPriceFromUnknownPayload(payload) {
   return null;
 }
 
-// ─── Catálogo local (fallback cuando no hay precio online) ────
-
-function getCatalogProduct(code) {
-  const product = state.catalog[code];
-  if (product) return { ...product, code };
-  return {
-    name: `Producto ${code.slice(-4)}`,
-    code,
-    price: Number((Math.random() * 4 + 0.8).toFixed(2)),
-  };
-}
-
-// ─── Consulta online de nombre y precio ───────────────────────
+// ─── Consulta online y fallback local/aprendido ───────────────────────
 
 async function getLiveProductInfo(code) {
+  // 1. PRECIO GUARDADO/APRENDIDO (Mayor prioridad)
+  const learned = state.learnedPrices[code];
+  if (learned && Number.isFinite(learned.price)) {
+    return { name: learned.name, price: learned.price, code, source: 'precio guardado' };
+  }
+
+  // 2. CATÁLOGO LOCAL (Fallback)
   const fallback = state.catalog[code];
   let name = fallback?.name || `Producto ${code}`;
   let price = Number.isFinite(fallback?.price) ? fallback.price : null;
 
+  if (price !== null) {
+    return { name, price, code, source: 'catálogo local' };
+  }
+
+  // 3. OPEN FOOD FACTS (Online)
   try {
     const offResponse = await fetch(
       `https://world.openfoodfacts.org/api/v0/product/${encodeURIComponent(code)}.json`
@@ -102,8 +107,6 @@ async function getLiveProductInfo(code) {
   } catch (error) {
     console.warn('No pude consultar Open Food Facts para nombre', error);
   }
-
-  if (price !== null) return { name, price, code, source: 'catálogo local' };
 
   const endpoints = [
     `https://prices.openfoodfacts.org/api/v1/prices?product_code=${encodeURIComponent(code)}`,
@@ -202,6 +205,22 @@ function updateBudgetStatus(total) {
 function addBasketItem(item) {
   state.basket.unshift(item);
   renderBasket();
+
+  // Auto-check plan list item if matches name
+  const itemNameLower = item.name.toLowerCase();
+  let planUpdated = false;
+  state.plan.forEach(pItem => {
+    if (!pItem.done) {
+      const pNameLower = pItem.name.toLowerCase();
+      // Simple substring test
+      if (itemNameLower.includes(pNameLower) || pNameLower.includes(itemNameLower)) {
+        pItem.done = true;
+        planUpdated = true;
+        setFeedback(`¡"${pItem.name}" marcado como conseguido en la lista!`);
+      }
+    }
+  });
+  if (planUpdated) renderPlan();
 }
 
 // ─── Escáner ──────────────────────────────────────────────────
@@ -373,11 +392,19 @@ function wireEvents() {
 
   dom.manualForm.addEventListener('submit', (e) => {
     e.preventDefault();
+    const itemName = dom.manualName.value.trim();
+    const itemPrice = Number(dom.manualPrice.value);
+    const itemCode = dom.manualCode.value.trim() || null;
+
+    if (itemCode) {
+      saveLearnedProduct(itemCode, itemName, itemPrice);
+    }
+
     addBasketItem({
-      name: dom.manualName.value.trim(),
-      price: Number(dom.manualPrice.value),
-      code: dom.manualCode.value.trim() || null,
-      source: 'manual / OCR',
+      name: itemName,
+      price: itemPrice,
+      code: itemCode,
+      source: 'manual / diario',
     });
     dom.manualForm.reset();
     dom.manualDialog.close();
