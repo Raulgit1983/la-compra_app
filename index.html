@@ -30,6 +30,8 @@
             `BarcodeDetector`.
           </p>
           <p id="scanFeedback" class="small feedback">Listo para escanear.</p>
+            Apunta al código de barras. Si tu móvil no lo detecta, puedes añadirlo manualmente.
+          </p>
           <div class="camera-wrap">
             <video id="cameraView" autoplay playsinline muted></video>
             <div class="scan-line"></div>
@@ -86,6 +88,7 @@
         <input id="receiptInput" type="file" accept="image/*" capture="environment" hidden />
         <div class="inline-actions">
           <button type="button" id="priceFromImageBtn" class="btn">Analizar precio por imagen</button>
+        <div class="inline-actions">
           <button type="button" id="closeManual" class="btn ghost">Cancelar</button>
           <button type="submit" class="btn primary">Guardar</button>
         </div>

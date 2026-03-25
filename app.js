@@ -154,6 +154,9 @@ function renderBasket() {
       </div>
       <div>
         <strong>${Number.isFinite(item.price) ? formatMoney(item.price) : 'Precio pendiente'}</strong>
+      </div>
+      <div>
+        <strong>${formatMoney(item.price)}</strong>
         <button class="btn ghost" data-remove="${index}">Quitar</button>
       </div>
     `;
@@ -161,6 +164,7 @@ function renderBasket() {
   });
 
   const total = state.basket.reduce((acc, item) => acc + (Number.isFinite(item.price) ? item.price : 0), 0);
+  const total = state.basket.reduce((acc, item) => acc + item.price, 0);
   dom.basketTotal.textContent = formatMoney(total);
   updateBudgetStatus(total);
 }
@@ -239,12 +243,28 @@ async function applyScanResult(code) {
 }
 
 async function scanWithBarcodeDetector() {
+function getCatalogProduct(code) {
+  const product = state.catalog[code];
+
+  if (product) {
+    return { ...product, code };
+  }
+
+  return {
+    name: `Producto ${code.slice(-4)}`,
+    code,
+    price: Number((Math.random() * 4 + 0.8).toFixed(2)),
+  };
+}
+
+async function scanOnce() {
   if (!state.stream || !detector) {
     return;
   }
 
   try {
     const barcodes = await detector.detect(dom.cameraView);
+
     if (!barcodes.length) {
       return;
     }
@@ -293,6 +313,20 @@ async function scanOnce() {
   }
 
   scanWithQuagga();
+    if (!code || code === state.lastCode) {
+      return;
+    }
+
+    state.lastCode = code;
+    const product = getCatalogProduct(code);
+    addBasketItem(product);
+
+    setTimeout(() => {
+      state.lastCode = null;
+    }, 1300);
+  } catch (error) {
+    console.error('No se pudo escanear', error);
+  }
 }
 
 async function startCamera() {
@@ -311,6 +345,7 @@ async function startCamera() {
     dom.cameraView.style.display = 'block';
     document.querySelector('.scan-line').style.display = 'block';
     dom.cameraState.textContent = hasBarcodeAPI ? 'Escaneando…' : 'Escaneando (modo iPhone compatible)…';
+    dom.cameraState.textContent = hasBarcodeAPI ? 'Escaneando…' : 'Cámara activa';
     dom.cameraState.classList.remove('off');
     dom.cameraState.classList.add('on');
     dom.toggleCameraBtn.textContent = 'Apagar cámara';
@@ -322,6 +357,12 @@ async function startCamera() {
     );
 
     state.scanTimer = setInterval(scanOnce, hasBarcodeAPI ? 1000 : 1400);
+    if (!hasBarcodeAPI) {
+      dom.cameraState.textContent = 'Cámara activa (sin API de escaneo)';
+      return;
+    }
+
+    state.scanTimer = setInterval(scanOnce, 1000);
   } catch (error) {
     alert('No pude abrir la cámara. Comprueba permisos.');
     console.error(error);
@@ -392,6 +433,11 @@ function wireEvents() {
       await startCamera();
     }
 
+    if (!hasBarcodeAPI) {
+      dom.manualDialog.showModal();
+      return;
+    }
+
     await scanOnce();
   });
 
@@ -438,6 +484,7 @@ function wireEvents() {
 
   dom.budgetInput.addEventListener('input', () => {
     const total = state.basket.reduce((acc, item) => acc + (Number.isFinite(item.price) ? item.price : 0), 0);
+    const total = state.basket.reduce((acc, item) => acc + item.price, 0);
     updateBudgetStatus(total);
   });
 
