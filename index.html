@@ -26,6 +26,10 @@
             <span id="cameraState" class="chip off">Cámara apagada</span>
           </div>
           <p class="hint">
+            Apunta al código de barras. En iPhone usamos un escáner alternativo para que funcione sin
+            `BarcodeDetector`.
+          </p>
+          <p id="scanFeedback" class="small feedback">Listo para escanear.</p>
             Apunta al código de barras. Si tu móvil no lo detecta, puedes añadirlo manualmente.
           </p>
           <div class="camera-wrap">
@@ -81,6 +85,9 @@
         <input id="manualName" type="text" placeholder="Nombre" required />
         <input id="manualPrice" type="number" min="0" step="0.01" placeholder="Precio" required />
         <input id="manualCode" type="text" placeholder="Código de barras (opcional)" />
+        <input id="receiptInput" type="file" accept="image/*" capture="environment" hidden />
+        <div class="inline-actions">
+          <button type="button" id="priceFromImageBtn" class="btn">Analizar precio por imagen</button>
         <div class="inline-actions">
           <button type="button" id="closeManual" class="btn ghost">Cancelar</button>
           <button type="submit" class="btn primary">Guardar</button>
@@ -88,6 +95,8 @@
       </form>
     </dialog>
 
+    <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2/dist/quagga.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script src="app.js" type="module"></script>
   </body>
 </html>

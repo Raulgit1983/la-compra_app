@@ -99,6 +99,11 @@ h1 {
   margin-top: 6px;
 }
 
+
+.feedback {
+  margin: 8px 0 0;
+}
+
 .camera-wrap {
   margin-top: 12px;
   position: relative;
