@@ -93,7 +93,10 @@
         <input id="manualName" type="text" placeholder="Nombre" required />
         <input id="manualPrice" type="number" min="0" step="0.01" placeholder="Precio" required />
         <input id="manualCode" type="text" placeholder="Código de barras (opcional)" />
-        <input id="manualStore" type="text" placeholder="Supermercado o Zona (ej. Mercadona, Sevilla)" />
+        <div style="position:relative;">
+          <input id="manualStore" type="text" autocomplete="off" placeholder="Supermercado o Zona (ej. Mercadona, Sevilla)" />
+          <ul id="storeSuggestions" class="suggestions-list" hidden></ul>
+        </div>
         <input id="receiptInput" type="file" accept="image/*" capture="environment" hidden />
         <div class="inline-actions">
           <button type="button" id="priceFromImageBtn" class="btn">Analizar precio por imagen</button>

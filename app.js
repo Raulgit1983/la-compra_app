@@ -35,6 +35,8 @@ const dom = {
   manualName: document.getElementById('manualName'),
   manualPrice: document.getElementById('manualPrice'),
   manualCode: document.getElementById('manualCode'),
+  manualStore: document.getElementById('manualStore'),
+  storeSuggestions: document.getElementById('storeSuggestions'),
   priceFromImageBtn: document.getElementById('priceFromImageBtn'),
   receiptInput: document.getElementById('receiptInput'),
   basketList: document.getElementById('basketList'),
@@ -407,6 +409,53 @@ async function extractPriceFromImage(file) {
   }
 }
 
+// ─── Autocompletado Geográfico (Nominatim) ─────────────────────────
+
+let addressTimeout = null;
+
+async function fetchAddressSuggestions(query) {
+  if (!query || query.length < 3) {
+    dom.storeSuggestions.hidden = true;
+    return;
+  }
+  
+  // Mostrar cargando
+  dom.storeSuggestions.innerHTML = '<li class="small hint">Buscando...</li>';
+  dom.storeSuggestions.hidden = false;
+
+  try {
+    // Buscar en España para más relevancia, aunque se puede quitar countrycodes
+    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=es&limit=5`;
+    const res = await fetch(url);
+    const data = await res.json();
+    
+    dom.storeSuggestions.innerHTML = '';
+    
+    if (!data.length) {
+      dom.storeSuggestions.innerHTML = '<li class="small hint">No se encontraron resultados</li>';
+      return;
+    }
+    
+    data.forEach(place => {
+      const li = document.createElement('li');
+      // Dividimos el nombre principal de la dirección detallada
+      const parts = place.display_name.split(', ');
+      const name = parts[0];
+      const details = parts.slice(1, 3).join(', '); // Localidad, región
+      
+      li.innerHTML = `<strong>${name}</strong><small>${details}</small>`;
+      li.addEventListener('click', () => {
+        dom.manualStore.value = `${name}, ${details}`;
+        dom.storeSuggestions.hidden = true;
+      });
+      dom.storeSuggestions.appendChild(li);
+    });
+  } catch (error) {
+    console.error("Error buscando ubicación:", error);
+    dom.storeSuggestions.hidden = true;
+  }
+}
+
 // ─── Eventos ──────────────────────────────────────────────────
 
 function wireEvents() {
@@ -494,6 +543,28 @@ function wireEvents() {
     state.plan.splice(index, 1);
     renderPlan();
   });
+
+  // Listener para el buscador de supermercado
+  if (dom.manualStore) {
+    dom.manualStore.addEventListener('input', (e) => {
+      clearTimeout(addressTimeout);
+      const query = e.target.value.trim();
+      if (query.length < 3) {
+        dom.storeSuggestions.hidden = true;
+        return;
+      }
+      addressTimeout = setTimeout(() => {
+        fetchAddressSuggestions(query);
+      }, 500); // 500ms debounce
+    });
+    
+    // Ocultar si hacemos click fuera
+    document.addEventListener('click', (e) => {
+      if (!dom.manualStore.contains(e.target) && !dom.storeSuggestions.contains(e.target)) {
+        dom.storeSuggestions.hidden = true;
+      }
+    });
+  }
 }
 
 function initSocialFeed() {

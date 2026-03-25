@@ -256,6 +256,41 @@ dialog {
   box-shadow: 0 16px 48px rgba(44, 48, 38, 0.2);
   background: var(--card);
 }
+/* Autocompletado de ubicaciones */
+.suggestions-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(44,48,38,0.1);
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 100;
+}
+.suggestions-list li {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.suggestions-list li:last-child {
+  border-bottom: none;
+}
+.suggestions-list li:hover {
+  background: #f0f3eb;
+}
+.suggestions-list li small {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--subtle);
+  margin-top: 2px;
+}
 @media (max-width: 720px) {
   .hero {
     flex-direction: column;
