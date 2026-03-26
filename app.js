@@ -1,7 +1,8 @@
 import { localCatalog } from './catalog.js';
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-app.js";
-import { getFirestore, doc, setDoc, getDoc, enableMultiTabIndexedDbPersistence, onSnapshot, query, collection, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDoc, enableMultiTabIndexedDbPersistence, onSnapshot, query, collection, orderBy, limit, addDoc, serverTimestamp, getDocs, where } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-firestore.js";
+import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAJa3P-HMm94anM-BQoOgtRKNvTy6sq7H8",
@@ -15,6 +16,12 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+const auth = getAuth(app);
+
+// Authentication Bootstrap
+signInAnonymously(auth).catch((error) => {
+  console.warn("Firebase Auth falló de forma silenciosa:", error.message);
+});
 
 // Enable offline persistence with multi-tab support
 enableMultiTabIndexedDbPersistence(db).catch((err) => {
@@ -48,6 +55,7 @@ const dom = {
   planName: document.getElementById('planName'),
   planQty: document.getElementById('planQty'),
   planList: document.getElementById('planList'),
+  communityList: document.getElementById('communityList'),
 };
 
 const state = {
@@ -61,18 +69,21 @@ const state = {
 
 async function saveLearnedProduct(code, name, price) {
   if (!code) return;
-  const store = dom.manualStore ? dom.manualStore.value.trim() : '';
+  const storeText = dom.manualStore ? dom.manualStore.value.trim() : '';
+  const userId = auth.currentUser ? auth.currentUser.uid : 'anonymous';
   try {
-    await setDoc(doc(db, "prices", code), {
+    // Phase A: Write to append-only priceReports instead of overwriting "prices"
+    await addDoc(collection(db, "priceReports"), {
+      code,
       name,
       price,
-      store,
-      updatedAt: new Date().toISOString()
-    }, { merge: true });
-    console.log(`Guardado en Firebase: ${name} a ${price}€ en ${store}`);
-    initSocialFeed(); // Refresh the feed after saving
+      storeText,
+      userId,
+      createdAt: serverTimestamp()
+    });
+    console.log(`Reportado de forma segura en Firebase: ${name} a ${price}€ en ${storeText}`);
   } catch (error) {
-    console.error("Error guardando en Firebase:", error);
+    console.error("Error reportando en Firebase:", error);
   }
 }
 
@@ -114,18 +125,32 @@ function extractPriceFromUnknownPayload(payload) {
 // ─── Consulta online y fallback local/aprendido ───────────────────────
 
 async function getLiveProductInfo(code) {
-  // 1. PRECIO COMUNITARIO (Firebase Firestore)
+  // 1. PRECIO COMUNITARIO (NUEVO: priceReports ledger)
+  try {
+    const qReports = query(collection(db, "priceReports"), where("code", "==", code), orderBy("createdAt", "desc"), limit(1));
+    const snapReports = await getDocs(qReports);
+    if (!snapReports.empty) {
+      const data = snapReports.docs[0].data();
+      if (Number.isFinite(data.price)) {
+        return { name: data.name, price: data.price, code, store: data.storeText || null, source: 'comunidad (reciente)' };
+      }
+    }
+  } catch (error) {
+    console.error("Error consultando priceReports:", error);
+  }
+
+  // 1.5 PRECIO COMUNITARIO LEGACY (Fallback a colección prices antigua)
   try {
     const docRef = doc(db, "prices", code);
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
       const data = docSnap.data();
       if (Number.isFinite(data.price)) {
-        return { name: data.name, price: data.price, code, store: data.store || null, source: 'comunidad' };
+        return { name: data.name, price: data.price, code, store: data.store || null, source: 'comunidad (legacy)' };
       }
     }
   } catch (error) {
-    console.error("Error consultando Firebase:", error);
+    console.error("Error consultando prices (legacy):", error);
   }
 
   // 2. CATÁLOGO LOCAL (Fallback)
@@ -385,7 +410,7 @@ async function extractPriceFromImage(file) {
     setFeedback('Analizando imagen para detectar precio…');
     const result = await window.Tesseract.recognize(file, 'eng+spa');
     const text = result?.data?.text || '';
-    
+
     // Mejor RegEx para abarcar resultados sucios "1, 50" o "1 50"
     const candidates = text.match(/\d+[\., ]\d{2}/g) || [];
 
@@ -418,7 +443,7 @@ async function fetchAddressSuggestions(query) {
     dom.storeSuggestions.hidden = true;
     return;
   }
-  
+
   // Mostrar cargando
   dom.storeSuggestions.innerHTML = '<li class="small hint">Buscando...</li>';
   dom.storeSuggestions.hidden = false;
@@ -428,21 +453,21 @@ async function fetchAddressSuggestions(query) {
     const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=es&limit=5`;
     const res = await fetch(url);
     const data = await res.json();
-    
+
     dom.storeSuggestions.innerHTML = '';
-    
+
     if (!data.length) {
       dom.storeSuggestions.innerHTML = '<li class="small hint">No se encontraron resultados</li>';
       return;
     }
-    
+
     data.forEach(place => {
       const li = document.createElement('li');
       // Dividimos el nombre principal de la dirección detallada
       const parts = place.display_name.split(', ');
       const name = parts[0];
       const details = parts.slice(1, 3).join(', '); // Localidad, región
-      
+
       li.innerHTML = `<strong>${name}</strong><small>${details}</small>`;
       li.addEventListener('click', () => {
         dom.manualStore.value = `${name}, ${details}`;
@@ -557,7 +582,7 @@ function wireEvents() {
         fetchAddressSuggestions(query);
       }, 500); // 500ms debounce
     });
-    
+
     // Ocultar si hacemos click fuera
     document.addEventListener('click', (e) => {
       if (!dom.manualStore.contains(e.target) && !dom.storeSuggestions.contains(e.target)) {
@@ -569,32 +594,35 @@ function wireEvents() {
 
 function initSocialFeed() {
   if (!dom.communityList) return;
-  
-  const q = query(collection(db, "prices"), orderBy("updatedAt", "desc"), limit(5));
-  
+
+  // Phase A: Listen to priceReports ledger instead of legacy prices collection
+  const q = query(collection(db, "priceReports"), orderBy("createdAt", "desc"), limit(4)); // Max 4 for mobile compactness
+
   onSnapshot(q, (snapshot) => {
     dom.communityList.innerHTML = '';
     if (snapshot.empty) {
-      dom.communityList.innerHTML = '<p class="small hint" style="padding:10px;">Aún no hay aportaciones de la comunidad.</p>';
+      dom.communityList.innerHTML = '<li class="small hint" style="padding:10px; list-style:none; text-align:center;">Aún no hay actividad reciente.</li>';
       return;
     }
-    
+
     snapshot.forEach(doc => {
       const data = doc.data();
       const li = document.createElement('li');
       li.className = 'basket-item';
       li.innerHTML = `
-        <div>
-          <strong>${data.name}</strong>
-          <p class="small hint" style="margin:2px 0 0">📍 ${data.store || 'Anónimo'}</p>
+        <div style="flex: 1;">
+          <strong style="color: var(--primary);">${data.name}</strong>
+          ${data.storeText ? `<p class="small hint" style="margin:2px 0 0">📍 ${data.storeText}</p>` : ''}
         </div>
-        <b>${Number(data.price).toFixed(2)}€</b>
+        <div style="text-align: right;">
+          <b style="font-size: 1.1rem;">${Number(data.price).toFixed(2)}€</b>
+        </div>
       `;
       dom.communityList.appendChild(li);
     });
   }, (err) => {
     console.warn("Feed social no pudo cargar", err);
-    dom.communityList.innerHTML = '<p class="small hint" style="padding:10px;">Modo sin conexión o fallo de red.</p>';
+    dom.communityList.innerHTML = '<li class="small hint" style="padding:10px; list-style:none; text-align:center;">No se pudo conectar al radar.</li>';
   });
 }
 
